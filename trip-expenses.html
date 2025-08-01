@@ -83,6 +83,57 @@
       margin: 0 2px;
       padding: 5px 10px;
     }
+
+    /* New styles for date filter and accounting summary */
+    .date-filter {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: #f0f8f4;
+      border-radius: 8px;
+    }
+
+    .date-filter input {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    .accounting-summary {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f0f8f4;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 15px;
+    }
+
+    .summary-card {
+      background-color: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .summary-card h3 {
+      margin-top: 0;
+      color: #2E8B57;
+      font-size: 16px;
+    }
+
+    .summary-card p {
+      font-size: 20px;
+      font-weight: bold;
+      margin: 5px 0;
+    }
   </style>
 </head>
 
@@ -90,6 +141,59 @@
   <div id="navbar"></div>
   <div class="container">
     <h1>Trip Expenses Manager</h1>
+
+    <!-- Date Filter Section -->
+    <div class="date-filter">
+      <div>
+        <label for="startDate">Start Date:</label>
+        <input type="date" id="startDate">
+      </div>
+      <div>
+        <label for="endDate">End Date:</label>
+        <input type="date" id="endDate">
+      </div>
+      <button id="applyFilter">Apply Filter</button>
+      <button id="resetFilter">Reset</button>
+    </div>
+
+    <!-- Accounting Summary Section -->
+    <div id="accountingSummary" class="accounting-summary">
+      <h2>Accounting Summary</h2>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <h3>Total Trips</h3>
+          <p id="totalTrips">0</p>
+        </div>
+        <div class="summary-card">
+          <h3>Total Revenue</h3>
+          <p id="totalRevenue">₹0</p>
+        </div>
+        <div class="summary-card">
+          <h3>Total Expenses</h3>
+          <p id="totalExpenses">₹0</p>
+        </div>
+        <div class="summary-card">
+          <h3>Net Profit</h3>
+          <p id="netProfit">₹0</p>
+        </div>
+        <div class="summary-card">
+          <h3>Profit Margin</h3>
+          <p id="profitMargin">0%</p>
+        </div>
+        <div class="summary-card">
+          <h3>Diesel Expenses</h3>
+          <p id="dieselExpenses">₹0</p>
+        </div>
+        <div class="summary-card">
+          <h3>Tyre Expenses</h3>
+          <p id="tyreExpenses">₹0</p>
+        </div>
+        <div class="summary-card">
+          <h3>Other Expenses</h3>
+          <p id="otherTotalExpenses">₹0</p>
+        </div>
+      </div>
+    </div>
 
     <div class="form-group">
       <label for="vehicle">Vehicle Number</label>
@@ -192,6 +296,7 @@
     const auth = getAuth();
 
     let currentUser = null;
+    let allExpensesData = []; // Store all expenses data
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -255,10 +360,18 @@
       const tbody = document.querySelector("#expensesTable tbody");
       onValue(ref(db, `users/${currentUser.uid}/tripExpenses`), (snapshot) => {
         tbody.innerHTML = "";
+        allExpensesData = []; // Reset the data array
+        
         snapshot.forEach((child) => {
           const data = child.val();
           const key = child.key;
+          
+          // Add the key to the data object
+          data.key = key;
+          // Add to our array for filtering
+          allExpensesData.push(data);
 
+          // Create the row as before
           const row = document.createElement("tr");
           row.innerHTML = `
             <td>${data.vehicle}</td>
@@ -282,6 +395,125 @@
           tbody.appendChild(row);
         });
       });
+    }
+
+    // Date filtering functionality
+    document.getElementById("applyFilter").addEventListener("click", function() {
+      const startDate = document.getElementById("startDate").value;
+      const endDate = document.getElementById("endDate").value;
+      
+      if (!startDate || !endDate) {
+        alert("Please select both start and end dates");
+        return;
+      }
+      
+      filterByDateRange(startDate, endDate);
+    });
+    
+    document.getElementById("resetFilter").addEventListener("click", function() {
+      document.getElementById("startDate").value = "";
+      document.getElementById("endDate").value = "";
+      
+      // Reset the table to show all data
+      const tbody = document.querySelector("#expensesTable tbody");
+      tbody.innerHTML = "";
+      
+      allExpensesData.forEach(data => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${data.vehicle}</td>
+          <td>${data.driver}</td>
+          <td>${data.date}</td>
+          <td>${data.tyre}</td>
+          <td>${data.diesel}</td>
+          <td>${data.advance}</td>
+          <td>${data.toll}</td>
+          <td>${data.vehicler}</td>
+          <td>${data.other}</td>
+          <td>${data.food}</td>
+          <td>${data.total}</td>
+          <td>${data.gain}</td>
+          <td>${data.profitt}</td>
+          <td class="actions">
+            <button onclick="editExpense('${data.key}')">Edit</button>
+            <button onclick="deleteExpense('${data.key}')">Delete</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+      
+      // Hide the accounting summary
+      document.getElementById("accountingSummary").style.display = "none";
+    });
+    
+    function filterByDateRange(startDate, endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59); // Set to end of day
+      
+      const filteredData = allExpensesData.filter(item => {
+        const itemDate = new Date(item.date);
+        return itemDate >= start && itemDate <= end;
+      });
+      
+      // Update the table with filtered data
+      const tbody = document.querySelector("#expensesTable tbody");
+      tbody.innerHTML = "";
+      
+      filteredData.forEach(data => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${data.vehicle}</td>
+          <td>${data.driver}</td>
+          <td>${data.date}</td>
+          <td>${data.tyre}</td>
+          <td>${data.diesel}</td>
+          <td>${data.advance}</td>
+          <td>${data.toll}</td>
+          <td>${data.vehicler}</td>
+          <td>${data.other}</td>
+          <td>${data.food}</td>
+          <td>${data.total}</td>
+          <td>${data.gain}</td>
+          <td>${data.profitt}</td>
+          <td class="actions">
+            <button onclick="editExpense('${data.key}')">Edit</button>
+            <button onclick="deleteExpense('${data.key}')">Delete</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+      
+      // Calculate and display accounting summary
+      calculateAccountingSummary(filteredData);
+    }
+    
+    function calculateAccountingSummary(data) {
+      // Show the accounting summary section
+      const summarySection = document.getElementById("accountingSummary");
+      summarySection.style.display = "block";
+      
+      // Calculate totals
+      const totalTrips = data.length;
+      const totalRevenue = data.reduce((sum, item) => sum + (item.gain || 0), 0);
+      const totalExpenses = data.reduce((sum, item) => sum + (item.total || 0), 0);
+      const netProfit = totalRevenue - totalExpenses;
+      const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue * 100).toFixed(2) : 0;
+      
+      // Calculate expense categories
+      const dieselExpenses = data.reduce((sum, item) => sum + (item.diesel || 0), 0);
+      const tyreExpenses = data.reduce((sum, item) => sum + (item.tyre || 0), 0);
+      const otherExpenses = totalExpenses - dieselExpenses - tyreExpenses;
+      
+      // Update the summary cards
+      document.getElementById("totalTrips").textContent = totalTrips;
+      document.getElementById("totalRevenue").textContent = `₹${totalRevenue.toFixed(2)}`;
+      document.getElementById("totalExpenses").textContent = `₹${totalExpenses.toFixed(2)}`;
+      document.getElementById("netProfit").textContent = `₹${netProfit.toFixed(2)}`;
+      document.getElementById("profitMargin").textContent = `${profitMargin}%`;
+      document.getElementById("dieselExpenses").textContent = `₹${dieselExpenses.toFixed(2)}`;
+      document.getElementById("tyreExpenses").textContent = `₹${tyreExpenses.toFixed(2)}`;
+      document.getElementById("otherTotalExpenses").textContent = `₹${otherExpenses.toFixed(2)}`;
     }
 
     window.deleteExpense = function (key) {
